@@ -6,17 +6,17 @@ from datetime import datetime
 
 # === CONFIGURATION ===
 st.set_page_config(layout="wide")
-st.title("Dashboard de prévision du prix du pétrole brut")
-st.markdown("Comparaison des modèles : XGBoost, CatBoost, LSTM, Prophet")
+st.title("Dashboard de prévision du prix des commodités")
+st.markdown("Comparaison des modèles : XGBoost, CatBoost, LSTM, Prophet, GRU, Random Forest")
 
 # === FICHIERS À CHARGER ===
 models = {
-    'XGBoost':   ('xgb_results.csv',      'xgb_metrics.json'),
-    'CatBoost':  ('catboost_results.csv', 'catboost_metrics.json'),
-    'LSTM':      ('lstm_results.csv',     'lstm_metrics.json'),
-    'Prophet':   ('prophet_results.csv',  'prophet_metrics.json'),
-    'GRU':   ('gru_results.csv', 'gru_metrics.json'),
-
+    'XGBoost':   ('xgb_results.csv',      'xgb_global_metrics.json'),
+    'CatBoost':  ('catboost_results.csv', 'catboost_global_metrics.json'),
+    'LSTM':      ('lstm_results.csv',     'lstm_global_metrics.json'),
+    'GRU':       ('gru_results.csv',      'gru_global_metrics.json'),
+    'Random Forest': ('rf_results.csv', 'rf_global_metrics.json'),
+    'PROPHET': ('stacking_results.csv', 'stacking_metrics.json'),
 }
 
 dfs = {}
@@ -34,8 +34,31 @@ for name, (csv_file, json_file) in models.items():
 # === AFFICHAGE DU TABLEAU DE MÉTRIQUES ===
 if metrics:
     st.subheader("Résultats comparés (MAE, RMSE, R²)")
-    table = pd.DataFrame(metrics).T.rename_axis('Modèle').reset_index()
-    st.dataframe(table.style.format({'MAE': '{:.2f}', 'RMSE': '{:.2f}', 'R2': '{:.4f}'}), use_container_width=True)
+
+    # Reformater les données pour afficher les métriques d'entraînement et de test dans un format plus lisible
+    results = []
+    for model_name, metric_values in metrics.items():
+        # Si les métriques d'entraînement ou de test sont manquantes, assigner une valeur par défaut
+        train_mae = f"{metric_values.get('train', {}).get('MAE', 0.0):.2f}"
+        train_rmse = f"{metric_values.get('train', {}).get('RMSE', 0.0):.2f}"
+        train_r2 = f"{metric_values.get('train', {}).get('R2', 0.0):.4f}"
+        
+        test_mae = f"{metric_values.get('test', {}).get('MAE', 0.0):.2f}"
+        test_rmse = f"{metric_values.get('test', {}).get('RMSE', 0.0):.2f}"
+        test_r2 = f"{metric_values.get('test', {}).get('R2', 0.0):.4f}"
+        
+        results.append({
+            'Modèle': model_name,
+            'Train MAE': train_mae,
+            'Train RMSE': train_rmse,
+            'Train R²': train_r2,
+            'Test MAE': test_mae,
+            'Test RMSE': test_rmse,
+            'Test R²': test_r2
+        })
+
+    table = pd.DataFrame(results)
+    st.dataframe(table, use_container_width=True)
 else:
     st.warning("Aucune métrique disponible.")
 
@@ -44,7 +67,14 @@ if dfs:
     model_choice = st.selectbox("Choisissez un modèle à visualiser :", list(dfs.keys()))
     df = dfs[model_choice]
 
-    # === CONVERSION DES DATES POUR LE SLIDER ===
+    # === SÉLECTEUR DE COMMODITY SI DISPONIBLE ===
+    selected_commodity = None
+    if 'commodity' in df.columns:
+        commodities = df['commodity'].unique()
+        selected_commodity = st.selectbox("Choisissez la commodité :", commodities)
+        df = df[df['commodity'] == selected_commodity]
+
+    # === SÉLECTEUR DE PÉRIODE ===
     min_date = pd.to_datetime(df['date'].min()).to_pydatetime()
     max_date = pd.to_datetime(df['date'].max()).to_pydatetime()
 
@@ -62,13 +92,13 @@ if dfs:
     fig = px.line(
         df_filtered, x='date', y=['y_true', 'y_pred'],
         labels={'value': 'Prix ($)', 'date': 'Date'},
-        title=f"Courbe de prédiction vs réelle — {model_choice}"
+        title=f"Prédiction vs Réalité — {model_choice}" + (f" ({selected_commodity})" if selected_commodity else "")
     )
 
-    # Colorer la courbe de prédiction en rouge
-    fig.data[1].line.color = 'red'
-    fig.update_layout(legend_title_text='', legend=dict(orientation="h", y=1.1))
+    if len(fig.data) > 1:
+        fig.data[1].line.color = 'red'  # courbe prédite en rouge
 
+    fig.update_layout(legend_title_text='', legend=dict(orientation="h", y=1.1))
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.error("Aucun fichier de données n'est disponible pour afficher les graphiques.")

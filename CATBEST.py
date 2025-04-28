@@ -23,33 +23,11 @@ df['commodity'] = df['commodity'].astype('category')
 features = ['open', 'high', 'low', 'volume', 'commodity']
 target = 'close'
 
-# === 5. Split train/test stratifié par commodity ===
-X_train_list, X_test_list = [], []
-y_train_list, y_test_list = [], []
-meta_train_list, meta_test_list = [], []
+X = df[features]
+y = df[target]
 
-for commodity in df['commodity'].cat.categories:
-    df_commodity = df[df['commodity'] == commodity].reset_index(drop=True)
-    X_com = df_commodity[features]
-    y_com = df_commodity[target]
-    meta_com = df_commodity[['date', 'commodity']]
-
-    X_tr, X_te, y_tr, y_te, m_tr, m_te = train_test_split(
-        X_com, y_com, meta_com, test_size=0.35, shuffle=False
-    )
-
-    X_train_list.append(X_tr)
-    X_test_list.append(X_te)
-    y_train_list.append(y_tr)
-    y_test_list.append(y_te)
-    meta_train_list.append(m_tr)
-    meta_test_list.append(m_te)
-
-X_train = pd.concat(X_train_list).reset_index(drop=True)
-X_test = pd.concat(X_test_list).reset_index(drop=True)
-y_train = pd.concat(y_train_list).reset_index(drop=True)
-y_test = pd.concat(y_test_list).reset_index(drop=True)
-meta_test = pd.concat(meta_test_list).reset_index(drop=True)
+# === 5. Split train/test ===
+X_train, X_test, y_train, y_test = train_test_split(X, y, shuffle=False, test_size=0.35)
 
 # === 6. Entraînement du modèle CatBoost ===
 model = CatBoostRegressor(verbose=0, cat_features=['commodity'])
@@ -69,10 +47,13 @@ print(f"RMSE : {rmse:.4f}")
 print(f"R2   : {r2:.4f}")
 
 # === 9. Sauvegarde des résultats ===
+test_dates = df.iloc[y_test.index]['date'].values
+test_commodities = df.iloc[y_test.index]['commodity'].values
+
 df_cat = pd.DataFrame({
-    'date': meta_test['date'],
-    'commodity': meta_test['commodity'],
-    'y_true': y_test,
+    'date': test_dates,
+    'commodity': test_commodities,
+    'y_true': y_test.values,
     'y_pred': y_pred
 })
 df_cat.to_csv('catboost_multi_commodities_results.csv', index=False)
@@ -97,6 +78,6 @@ for com in unique_commodities:
     plt.grid(True)
     plt.tight_layout()
 
-    # Sauvegarde optionnelle de l’image
-    
+    # 3 COMODITY MEILLEUR RESULTAT 
+   
     plt.show()
